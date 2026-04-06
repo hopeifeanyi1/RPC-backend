@@ -10,7 +10,10 @@ async function bootstrap(): Promise<void> {
 
   // CORS — allow Next.js dev frontend
   app.enableCors({
-    origin: ['http://localhost:3000'],
+    origin: [
+      'http://localhost:3000',
+      'https://renovation-pricing-calculator.vercel.app',
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
