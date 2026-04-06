@@ -62,10 +62,8 @@ export class ExportService {
 
     try {
       if (isProduction) {
-        const chromium = await import('@sparticuz/chromium');
-        const puppeteerCore = await import('puppeteer-core');
-
-        this.logger.log('Using @sparticuz/chromium for production environment');
+        const chromiumModule = await import('@sparticuz/chromium');
+        const chromium = chromiumModule.default ?? chromiumModule;
 
         const executablePath = await chromium.executablePath();
         this.logger.log(`Executable path: ${executablePath}`);
@@ -84,7 +82,7 @@ export class ExportService {
             '--disable-dev-tools',
           ],
           defaultViewport: { width: 1920, height: 1080 },
-          executablePath: executablePath,
+          executablePath,
           headless: chromium.headless,
         });
       } else {
