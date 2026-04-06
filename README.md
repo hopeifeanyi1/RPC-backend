@@ -1,98 +1,245 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# RPC Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Renovation Pricing Calculator — NestJS backend for parsing Excel files, running the calculation engine, persisting results, and generating PDF reports.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## Tech Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **NestJS**
+- **TypeScript**
+- **TypeORM**
+- **PostgreSQL** (hosted on Supabase)
+- **exceljs** (Excel parsing)
+- **Puppeteer** (PDF generation)
+- **@sparticuz/chromium** (Chromium for production/Render)
+- **@nestjs/swagger** (API documentation)
+- **class-validator + class-transformer** (DTO validation)
 
-## Project setup
+---
 
-```bash
-$ npm install
-```
+## Prerequisites
 
-## Compile and run the project
+- Node.js v20 LTS (recommended)
+- npm v10+
+- A Supabase project with a PostgreSQL database
+- Google Chrome installed locally (for PDF generation in development)
+
+---
+
+## Getting Started
 
 ```bash
-# development
-$ npm run start
+# Install dependencies
+npm install
 
-# watch mode
-$ npm run start:dev
+# Copy environment template and fill in values
+cp .env.example .env
 
-# production mode
-$ npm run start:prod
+# Start development server
+npm run start:dev
 ```
 
-## Run tests
+The API runs at `http://localhost:3001`.  
+Swagger UI is available at `http://localhost:3001/api`.
+
+---
+
+## Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+
+PORT=3001
+NODE_ENV=development
+```
+
+> The connection string uses Supabase's **PgBouncer pooler URL** (port 6543), not the direct connection. This is the format that works with TypeORM + Supabase. Find it in your Supabase dashboard under **Project → Connect → Transaction pooler**.
+
+---
+
+## Project Structure
+
+```
+src/
+├── main.ts                             # Bootstrap, Swagger, ValidationPipe, CORS
+├── app.module.ts                       # Root module
+├── config/
+│   └── configuration.ts               # @nestjs/config schema
+├── database/
+│   └── database.module.ts             # TypeORM config with SSL for Supabase
+└── modules/
+    ├── upload/
+    │   ├── upload.module.ts
+    │   ├── upload.controller.ts        # POST /upload/parse
+    │   └── upload.service.ts           # exceljs parser → returns JSON, no DB write
+    ├── project/
+    │   ├── project.module.ts
+    │   ├── project.controller.ts       # POST /project/calculate, GET /project/:id
+    │   ├── project.service.ts          # Orchestrates save, calculate, persist
+    │   ├── entities/
+    │   │   ├── project.entity.ts
+    │   │   ├── room.entity.ts
+    │   │   ├── material.entity.ts
+    │   │   ├── project-material.entity.ts
+    │   │   └── calculation-log.entity.ts
+    │   └── dto/
+    │       ├── create-project.dto.ts
+    │       ├── room.dto.ts
+    │       └── material.dto.ts
+    ├── calculation/
+    │   ├── calculation.module.ts
+    │   ├── calculation.service.ts      # Formula engine
+    │   └── types/
+    │       └── calculation.types.ts    # FormulaStep, CalculationResult
+    └── export/
+        ├── export.module.ts
+        ├── export.controller.ts        # POST /project/:id/pdf
+        ├── export.service.ts           # Puppeteer PDF generation
+        └── types/
+            └── chromium.d.ts           # Type declarations for @sparticuz/chromium
+```
+
+---
+
+## API Endpoints
+
+Full interactive documentation is available at `http://localhost:3001/api` via Swagger UI.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/upload/parse` | Parse an uploaded Excel file. Returns JSON — does **not** save to DB. |
+| `POST` | `/project/calculate` | Submit rooms + materials, run calculation, save to DB, return full result. |
+| `GET` | `/project/:id` | Fetch a saved project with rooms, materials, and latest formula trace. |
+| `POST` | `/project/:id/pdf` | Generate and download a PDF report for a project. |
+
+---
+
+## Database
+
+TypeORM connects to Supabase PostgreSQL with SSL enabled. `synchronize` is set to `false` — tables must be created via migrations. The connection pool is capped at 10 connections (`extra.max: 10`) which is appropriate for Supabase's free tier limits.
+
+### Entities
+
+| Entity | Description |
+|--------|-------------|
+| `ProjectEntity` | Top-level project record with `inputSource`, `totalPrice`, `status` |
+| `RoomEntity` | Room dimensions and computed `sqft`, `roomTotal`. FK → Project |
+| `MaterialEntity` | Reusable material with `unitPrice`, `qtyPerSqft` |
+| `ProjectMaterialEntity` | Join table linking materials to a project with `totalQuantity`, `totalCost` |
+| `CalculationLogEntity` | Versioned log storing `formulaTrace` as JSONB |
+
+### Indexes
+
+- `Room.projectId`
+- `ProjectMaterial.projectId`
+- `CalculationLog.projectId`
+- `Project.createdAt`
+
+---
+
+## Calculation Engine
+
+The `CalculationService` is the core of the app. Given rooms and materials it:
+
+1. Computes `sqft = width × height` per room
+2. Computes material contribution per room: `sqft × qtyPerSqft × unitPrice`
+3. Sums contributions across all rooms per material
+4. Returns a `CalculationResult` with a full `FormulaStep[]` trace
+
+Every single arithmetic step generates a `FormulaStep`:
+
+```ts
+interface FormulaStep {
+  label: string       // e.g. "Living Room sqft"
+  expression: string  // e.g. "14 × 12"
+  result: number      // e.g. 168
+  unit: string        // e.g. "sqft" or "$"
+}
+```
+
+This trace is stored as JSONB in `CalculationLog` and returned to the frontend for display in the Formula Viewer.
+
+---
+
+## PDF Generation
+
+PDF generation uses a dual-environment strategy in `ExportService`:
+
+**Development** — uses the locally installed `puppeteer` package which bundles its own Chromium, or falls back to your system Chrome:
+```ts
+// src/modules/export/export.service.ts
+const browser = await puppeteer.launch({
+  headless: true,
+  args: ['--no-sandbox', '--disable-setuid-sandbox'],
+});
+```
+
+**Production (Render)** — uses `@sparticuz/chromium` which provides a Lambda/serverless-compatible Chromium binary:
+```ts
+const executablePath = await chromium.executablePath();
+browser = await puppeteerCore.launch({
+  args: [...chromium.args],
+  executablePath,
+  headless: chromium.headless,
+});
+```
+
+The environment is detected via `process.env.NODE_ENV`.
+
+To install Puppeteer without downloading Chromium (recommended for dev on slow connections):
+```bash
+PUPPETEER_SKIP_DOWNLOAD=true npm install puppeteer
+```
+
+---
+
+## Excel File Format
+
+The upload parser (`upload.service.ts`) expects:
+
+**Sheet 1 — `Rooms`**
+| Room Name | Width (ft) | Height (ft) |
+|-----------|------------|-------------|
+| Living Room | 14 | 12 |
+
+**Sheet 2 — `Materials`**
+| Material Name | Unit | Unit Price | Qty Per SqFt |
+|---------------|------|------------|--------------|
+| Paint | gallon | 48.00 | 0.045 |
+
+If sheets or columns are missing, a `400 Bad Request` is returned with a descriptive message. A sample file (`renovation_sample.xlsx`) is included in the repo.
+
+---
+
+## Validation
+
+A global `ValidationPipe` is configured in `main.ts` with `whitelist: true` and `forbidNonWhitelisted: true`. All DTOs use `class-validator` decorators. Requests with missing or invalid fields return a structured `400` response.
+
+---
+
+## Available Scripts
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run start:dev     # Development with hot reload
+npm run start:prod    # Production (runs compiled output)
+npm run build         # Compile TypeScript to /dist
+npm run lint          # Run ESLint
+npm run test          # Run unit tests
 ```
 
-## Deployment
+---
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Deployment (Render)
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+1. Push to GitHub
+2. Create a new **Web Service** on Render
+3. Set build command: `npm install && npm run build`
+4. Set start command: `node dist/main`
+5. Add all environment variables from `.env` in the Render dashboard
+6. Set `NODE_ENV=production`
+7. Set `synchronize=false` in `database.module.ts` and run migrations before first deploy
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+> Render's free tier spins down after inactivity. The first request after sleep may take 30–60 seconds.
