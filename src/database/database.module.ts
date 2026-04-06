@@ -31,7 +31,7 @@ import { CalculationLogEntity } from '../modules/project/entities/calculation-lo
               ProjectMaterialEntity,
               CalculationLogEntity,
             ],
-            synchronize: true,
+            synchronize: false,
             logging: false,
           };
         }
@@ -53,7 +53,7 @@ import { CalculationLogEntity } from '../modules/project/entities/calculation-lo
             ProjectMaterialEntity,
             CalculationLogEntity,
           ],
-          synchronize: true,
+          synchronize: false,
           logging: false,
         };
       },

@@ -9,13 +9,7 @@ import { RoomEntity } from '../project/entities/room.entity';
 import { ProjectMaterialEntity } from '../project/entities/project-material.entity';
 import { CalculationLogEntity } from '../project/entities/calculation-log.entity';
 import { FormulaStep } from '../calculation/types/calculation.types';
-
-interface ChromiumModule {
-  args: string[];
-  headless: boolean | 'shell';
-  executablePath: () => Promise<string>;
-  default?: ChromiumModule;
-}
+import type puppeteerType from 'puppeteer';
 
 @Injectable()
 export class ExportService {
@@ -68,9 +62,13 @@ export class ExportService {
 
     try {
       if (isProduction) {
-        const chromiumRaw = (await import('@sparticuz/chromium')) as ChromiumModule;
-        const chromium: ChromiumModule = chromiumRaw.default ?? chromiumRaw;
+        const chromium = await import('@sparticuz/chromium');
         const puppeteerCore = await import('puppeteer-core');
+
+        this.logger.log('Using @sparticuz/chromium for production environment');
+
+        const executablePath = await chromium.executablePath();
+        this.logger.log(`Executable path: ${executablePath}`);
 
         browser = await puppeteerCore.default.launch({
           args: [
@@ -83,13 +81,17 @@ export class ExportService {
             '--no-zygote',
             '--disable-gpu',
             '--single-process',
+            '--disable-dev-tools',
           ],
           defaultViewport: { width: 1920, height: 1080 },
-          executablePath: await chromium.executablePath(),
+          executablePath: executablePath,
           headless: chromium.headless,
         });
       } else {
-        const puppeteer = await import('puppeteer');
+        const puppeteer = (await import('puppeteer')) as unknown as {
+          default: typeof puppeteerType;
+        };
+        this.logger.log('Using puppeteer for development environment');
 
         browser = (await puppeteer.default.launch({
           headless: true,
@@ -97,10 +99,17 @@ export class ExportService {
         })) as unknown as Browser;
       }
 
+      if (!browser) {
+        throw new Error('Failed to launch browser');
+      }
+
       const page = await browser.newPage();
 
       this.logger.log('Setting HTML content...');
-      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.setContent(html, {
+        waitUntil: 'networkidle0',
+        timeout: 30000,
+      });
 
       this.logger.log('Generating PDF...');
       const pdfBuffer = await page.pdf({
@@ -112,15 +121,20 @@ export class ExportService {
       this.logger.log('PDF generated successfully');
       return Buffer.from(pdfBuffer);
     } catch (error) {
-      this.logger.error('PDF generation error:', error);
+      this.logger.error('PDF generation error:');
+      this.logger.error(error);
       if (error instanceof Error) {
         throw new Error(`PDF generation failed: ${error.message}`);
       }
       throw new Error('PDF generation failed: Unknown error');
     } finally {
       if (browser) {
-        await browser.close();
-        this.logger.log('Browser closed');
+        try {
+          await browser.close();
+          this.logger.log('Browser closed');
+        } catch (closeError) {
+          this.logger.error('Error closing browser:', closeError);
+        }
       }
     }
   }
