@@ -3,11 +3,19 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import type { Browser } from 'puppeteer-core';
 import { ProjectEntity } from '../project/entities/project.entity';
 import { RoomEntity } from '../project/entities/room.entity';
 import { ProjectMaterialEntity } from '../project/entities/project-material.entity';
 import { CalculationLogEntity } from '../project/entities/calculation-log.entity';
 import { FormulaStep } from '../calculation/types/calculation.types';
+
+interface ChromiumModule {
+  args: string[];
+  headless: boolean | 'shell';
+  executablePath: () => Promise<string>;
+  default?: ChromiumModule;
+}
 
 @Injectable()
 export class ExportService {
@@ -56,45 +64,43 @@ export class ExportService {
     this.logger.log('Launching Puppeteer browser...');
 
     const isProduction = process.env.NODE_ENV === 'production';
-    let browser;
-
-    if (isProduction) {
-      const chromium = await import('@sparticuz/chromium');
-      const puppeteerCore = await import('puppeteer-core');
-
-      browser = await puppeteerCore.default.launch({
-        args: [
-          ...chromium.args,
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-          '--single-process',
-        ],
-        defaultViewport: { width: 1920, height: 1080 },
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
-      });
-    } else {
-      const puppeteer = await import('puppeteer');
-
-      browser = await puppeteer.default.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
-    }
+    let browser: Browser | null = null;
 
     try {
+      if (isProduction) {
+        const chromiumRaw = (await import('@sparticuz/chromium')) as ChromiumModule;
+        const chromium: ChromiumModule = chromiumRaw.default ?? chromiumRaw;
+        const puppeteerCore = await import('puppeteer-core');
+
+        browser = await puppeteerCore.default.launch({
+          args: [
+            ...chromium.args,
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',
+            '--single-process',
+          ],
+          defaultViewport: { width: 1920, height: 1080 },
+          executablePath: await chromium.executablePath(),
+          headless: chromium.headless,
+        });
+      } else {
+        const puppeteer = await import('puppeteer');
+
+        browser = (await puppeteer.default.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        })) as unknown as Browser;
+      }
+
       const page = await browser.newPage();
 
       this.logger.log('Setting HTML content...');
-      await page.setContent(html, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000,
-      });
+      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
       this.logger.log('Generating PDF...');
       const pdfBuffer = await page.pdf({
@@ -112,8 +118,10 @@ export class ExportService {
       }
       throw new Error('PDF generation failed: Unknown error');
     } finally {
-      await browser.close();
-      this.logger.log('Browser closed');
+      if (browser) {
+        await browser.close();
+        this.logger.log('Browser closed');
+      }
     }
   }
 
