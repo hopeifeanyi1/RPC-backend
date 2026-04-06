@@ -3,7 +3,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import puppeteer from 'puppeteer';
 import { ProjectEntity } from '../project/entities/project.entity';
 import { RoomEntity } from '../project/entities/room.entity';
 import { ProjectMaterialEntity } from '../project/entities/project-material.entity';
@@ -56,18 +55,37 @@ export class ExportService {
   private async renderPdf(html: string): Promise<Buffer> {
     this.logger.log('Launching Puppeteer browser...');
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-      ],
-    });
+    const isProduction = process.env.NODE_ENV === 'production';
+    let browser;
+
+    if (isProduction) {
+      const chromium = await import('@sparticuz/chromium');
+      const puppeteerCore = await import('puppeteer-core');
+
+      browser = await puppeteerCore.default.launch({
+        args: [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--single-process',
+        ],
+        defaultViewport: { width: 1920, height: 1080 },
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+      });
+    } else {
+      const puppeteer = await import('puppeteer');
+
+      browser = await puppeteer.default.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
+    }
 
     try {
       const page = await browser.newPage();
