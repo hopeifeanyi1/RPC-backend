@@ -64,6 +64,9 @@ export class ExportService {
       if (isProduction) {
         const chromiumModule = await import('@sparticuz/chromium');
         const chromium = chromiumModule.default ?? chromiumModule;
+        const puppeteerCore = await import('puppeteer-core'); // ← was missing
+
+        this.logger.log('Using @sparticuz/chromium for production environment');
 
         const executablePath = await chromium.executablePath();
         this.logger.log(`Executable path: ${executablePath}`);
