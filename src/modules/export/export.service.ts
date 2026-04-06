@@ -1,9 +1,9 @@
 // src/modules/export/export.service.ts
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import puppeteer, { type Browser } from 'puppeteer';
+import puppeteer from 'puppeteer';
 import { ProjectEntity } from '../project/entities/project.entity';
 import { RoomEntity } from '../project/entities/room.entity';
 import { ProjectMaterialEntity } from '../project/entities/project-material.entity';
@@ -12,6 +12,8 @@ import { FormulaStep } from '../calculation/types/calculation.types';
 
 @Injectable()
 export class ExportService {
+  private readonly logger = new Logger(ExportService.name);
+
   constructor(
     @InjectRepository(ProjectEntity)
     private readonly projectRepo: Repository<ProjectEntity>,
@@ -46,25 +48,54 @@ export class ExportService {
     });
 
     const formulaSteps: FormulaStep[] = latestLog?.formulaTrace ?? [];
-
     const html = this.buildHtml(project, rooms, projectMaterials, formulaSteps);
 
-    const browser: Browser = await puppeteer.launch({
-  headless: true,
-  args: ['--no-sandbox', '--disable-setuid-sandbox'],
-});
+    return this.renderPdf(html);
+  }
+
+  private async renderPdf(html: string): Promise<Buffer> {
+    this.logger.log('Launching Puppeteer browser...');
+
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+      ],
+    });
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+
+      this.logger.log('Setting HTML content...');
+      await page.setContent(html, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+
+      this.logger.log('Generating PDF...');
       const pdfBuffer = await page.pdf({
         format: 'A4',
         margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
         printBackground: true,
       });
+
+      this.logger.log('PDF generated successfully');
       return Buffer.from(pdfBuffer);
+    } catch (error) {
+      this.logger.error('PDF generation error:', error);
+      if (error instanceof Error) {
+        throw new Error(`PDF generation failed: ${error.message}`);
+      }
+      throw new Error('PDF generation failed: Unknown error');
     } finally {
       await browser.close();
+      this.logger.log('Browser closed');
     }
   }
 
